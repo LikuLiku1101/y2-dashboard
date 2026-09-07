@@ -1,4 +1,4 @@
-﻿import streamlit as st
+import streamlit as st
 import pandas as pd
 from google.ads.googleads.client import GoogleAdsClient
 from google.analytics.data_v1beta import BetaAnalyticsDataClient
@@ -281,7 +281,7 @@ with col_main_left:
         paper_bgcolor="rgba(0,0,0,0)",
         barmode='group'
     )
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
 
     st.markdown("<div style='height:20px'></div>", unsafe_allow_html=True)
 
