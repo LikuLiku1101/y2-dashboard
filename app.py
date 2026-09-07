@@ -1,8 +1,9 @@
-import streamlit as st
+﻿import streamlit as st
 import pandas as pd
 from google.ads.googleads.client import GoogleAdsClient
 from google.analytics.data_v1beta import BetaAnalyticsDataClient
 from google.analytics.data_v1beta.types import DateRange, Dimension, Metric, RunReportRequest
+from google.oauth2 import service_account
 import datetime
 import random
 import os
@@ -74,15 +75,12 @@ with h_right:
             start_date_b, end_date_b = presets[selected_preset_b]
             st.markdown(f"<div class='date-info'>{start_date_b.strftime('%Y-%m-%d')} 〜 {end_date_b.strftime('%Y-%m-%d')}</div>", unsafe_allow_html=True)
     else:
-        start_date_b = end_date_b = today # ダミー
+        start_date_b = end_date_b = today
 
 st.markdown("---")
 
-YAML_PATH = "google-ads.yaml"
 ADS_CUSTOMER_ID = "8153094421"
 GA4_PROPERTY_ID = "552749882"
-GA4_KEY_PATH = "teak-amphora-506601-t5-806531f345b4.json"
-os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = GA4_KEY_PATH
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def fetch_real_data(start_str, end_str):
@@ -91,8 +89,12 @@ def fetch_real_data(start_str, end_str):
     ads_error = None
     
     try:
-        client = GoogleAdsClient.load_from_storage(YAML_PATH)
+        # Streamlit SecretsからGoogle Adsの認証情報を取得
+        ads_credentials = dict(st.secrets["google_ads"])
+        ads_credentials["use_proto_plus"] = True
+        client = GoogleAdsClient.load_from_dict(ads_credentials)
         ga_service = client.get_service("GoogleAdsService")
+        
         query_summary = f'''
             SELECT segments.date, metrics.clicks, metrics.impressions, metrics.cost_micros, metrics.conversions
             FROM customer 
@@ -137,7 +139,11 @@ def fetch_real_data(start_str, end_str):
     ga4_df = pd.DataFrame()
     ga4_error = None
     try:
-        ga4_client = BetaAnalyticsDataClient()
+        # Streamlit SecretsからGA4の認証情報を取得
+        ga4_credentials = dict(st.secrets["gcp_service_account"])
+        creds = service_account.Credentials.from_service_account_info(ga4_credentials)
+        ga4_client = BetaAnalyticsDataClient(credentials=creds)
+        
         request = RunReportRequest(
             property=f"properties/{GA4_PROPERTY_ID}",
             dimensions=[Dimension(name="sessionSourceMedium")],
@@ -252,13 +258,13 @@ with col_main_left:
         df_summary_a['Day'] = [f"{i+1}日目" for i in range(len(df_summary_a))]
         df_summary_b['Day'] = [f"{i+1}日目" for i in range(len(df_summary_b))]
         
-        # 比較データ (グレー系)
+        # 比較データ
         fig.add_trace(go.Bar(x=df_summary_b['Day'], y=df_summary_b["費用"], name="費用 (比較)", marker_color="rgba(100, 150, 200, 0.2)", yaxis="y1"))
         fig.add_trace(go.Scatter(x=df_summary_b['Day'], y=df_summary_b["クリック数"], name="クリック数 (比較)", mode="lines", line=dict(color="rgba(180, 180, 180, 0.5)", width=2, dash='dot'), yaxis="y2"))
         fig.add_trace(go.Scatter(x=df_summary_b['Day'], y=df_summary_b["コンバージョン"], name="CV (比較)", mode="lines", line=dict(color="rgba(200, 200, 100, 0.5)", width=2, dash='dot'), yaxis="y2", visible="legendonly"))
         fig.add_trace(go.Scatter(x=df_summary_b['Day'], y=df_summary_b["CTR"], name="CTR (比較)", mode="lines", line=dict(color="rgba(200, 100, 200, 0.5)", width=2, dash='dot'), yaxis="y2", visible="legendonly"))
         
-        # 対象データ (ネオンカラー)
+        # 対象データ
         fig.add_trace(go.Bar(x=df_summary_a['Day'], y=df_summary_a["費用"], name="費用 (対象)", marker_color="rgba(0, 243, 255, 0.6)", marker_line_color="#00f3ff", marker_line_width=1.5, yaxis="y1"))
         fig.add_trace(go.Scatter(x=df_summary_a['Day'], y=df_summary_a["クリック数"], name="クリック数 (対象)", mode="lines+markers", line=dict(color="#ff007f", width=3), marker=dict(color="#ff007f", size=7, line=dict(color="#ffffff", width=1)), yaxis="y2"))
         fig.add_trace(go.Scatter(x=df_summary_a['Day'], y=df_summary_a["コンバージョン"], name="CV (対象)", mode="lines+markers", line=dict(color="#ffcf00", width=3), marker=dict(size=7), yaxis="y2", visible="legendonly"))
