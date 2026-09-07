@@ -1,4 +1,4 @@
-import streamlit as st
+﻿import streamlit as st
 import pandas as pd
 from google.ads.googleads.client import GoogleAdsClient
 from google.analytics.data_v1beta import BetaAnalyticsDataClient
@@ -18,12 +18,13 @@ st.markdown("""
 [data-testid="stMetric"] { background-color: rgba(2, 12, 27, 0.7); border-radius: 8px; padding: 15px 20px; box-shadow: 0 0 10px rgba(0, 243, 255, 0.15), inset 0 0 10px rgba(0, 243, 255, 0.05); border: 1px solid rgba(0, 243, 255, 0.5); backdrop-filter: blur(5px); }
 [data-testid="stMetricLabel"] { font-size: 0.95rem; font-weight: bold; color: #64ffda !important; text-transform: uppercase; letter-spacing: 1px; }
 [data-testid="stMetricValue"] { font-size: 2.2rem; font-weight: 800; color: #ffffff !important; text-shadow: 0 0 10px rgba(0, 243, 255, 0.6); }
+[data-testid="stMetricDelta"] { font-size: 1.1rem !important; }
 h1, h3, h4 { color: #64ffda !important; font-family: 'Arial', sans-serif; text-shadow: 0 0 8px rgba(100, 255, 218, 0.3); letter-spacing: 1px; }
-h1 { margin-bottom: 0 !important; padding-bottom: 0 !important; }
+h1 { margin-bottom: 0 !important; padding-bottom: 0 !important; font-size: 2.2rem; }
 hr { border-color: rgba(0, 243, 255, 0.2); box-shadow: 0 0 5px rgba(0, 243, 255, 0.4); margin-top: 1.5rem; margin-bottom: 1.5rem; }
 thead tr th { background-color: #0a192f !important; color: #00f3ff !important; }
 .report-box { background-color: rgba(2, 12, 27, 0.5); border: 1px solid rgba(0, 243, 255, 0.3); padding: 25px; border-radius: 8px; color: #ffffff; line-height: 1.8; font-size: 1.05rem; }
-.date-info { color: #00f3ff; font-weight: bold; margin-top: 35px; text-shadow: 0 0 5px rgba(0, 243, 255, 0.5); font-size: 1.1rem; }
+.date-info { color: #00f3ff; text-shadow: 0 0 5px rgba(0, 243, 255, 0.5); font-size: 0.9rem; margin-top: -10px; margin-bottom: 15px; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -43,22 +44,37 @@ presets = {
     "カスタム指定": None
 }
 
-# --- ヘッダー領域 ---
-h_left, h_mid, h_right = st.columns([2, 0.8, 1.2])
+# --- ヘッダー領域 (比較機能付き) ---
+h_left, h_mid1, h_mid2, h_right = st.columns([1.8, 1, 0.6, 1])
 with h_left:
+    st.markdown("<div style='height: 15px;'></div>", unsafe_allow_html=True)
     st.title("🌌 Y2ENERGY COMMAND CENTER")
-with h_mid:
-    selected_preset = st.selectbox("期間を選択", list(presets.keys()), index=4)
-with h_right:
-    if selected_preset == "カスタム指定":
-        date_range = st.date_input("カレンダー", value=(today - datetime.timedelta(days=30), today), max_value=today)
-        if len(date_range) == 2:
-            start_date, end_date = date_range
-        else:
-            start_date = end_date = date_range[0]
+with h_mid1:
+    selected_preset_a = st.selectbox("▶ 対象期間", list(presets.keys()), index=4)
+    if selected_preset_a == "カスタム指定":
+        date_range_a = st.date_input("カレンダー (対象)", value=(today - datetime.timedelta(days=30), today), max_value=today)
+        start_date_a = date_range_a[0]
+        end_date_a = date_range_a[1] if len(date_range_a) == 2 else date_range_a[0]
     else:
-        start_date, end_date = presets[selected_preset]
-        st.markdown(f"<div class='date-info'>対象期間: {start_date.strftime('%Y-%m-%d')} 〜 {end_date.strftime('%Y-%m-%d')}</div>", unsafe_allow_html=True)
+        start_date_a, end_date_a = presets[selected_preset_a]
+        st.markdown(f"<div class='date-info'>{start_date_a.strftime('%Y-%m-%d')} 〜 {end_date_a.strftime('%Y-%m-%d')}</div>", unsafe_allow_html=True)
+
+with h_mid2:
+    st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
+    compare_mode = st.toggle("VS 比較モード")
+
+with h_right:
+    if compare_mode:
+        selected_preset_b = st.selectbox("▶ 比較期間", list(presets.keys()), index=5)
+        if selected_preset_b == "カスタム指定":
+            date_range_b = st.date_input("カレンダー (比較)", value=(last_week_start, last_week_end), max_value=today)
+            start_date_b = date_range_b[0]
+            end_date_b = date_range_b[1] if len(date_range_b) == 2 else date_range_b[0]
+        else:
+            start_date_b, end_date_b = presets[selected_preset_b]
+            st.markdown(f"<div class='date-info'>{start_date_b.strftime('%Y-%m-%d')} 〜 {end_date_b.strftime('%Y-%m-%d')}</div>", unsafe_allow_html=True)
+    else:
+        start_date_b = end_date_b = today # ダミー
 
 st.markdown("---")
 
@@ -164,108 +180,130 @@ def generate_mock_ads_data(start_str, end_str):
     
     return pd.DataFrame(summary_data), pd.DataFrame(kw_data)
 
-with st.spinner('各APIからリアルタイムデータを取得しています...'):
-    start_str = start_date.strftime("%Y-%m-%d")
-    end_str = end_date.strftime("%Y-%m-%d")
-    df_summary, df_keywords, ads_error, df_ga4, ga4_error = fetch_real_data(start_str, end_str)
-
-if ads_error or df_summary.empty:
-    if ads_error:
-        st.error(f"⚠️ Google広告 APIエラー: (詳細: {ads_error})")
-    df_summary, df_keywords = generate_mock_ads_data(start_str, end_str)
-
-if not df_summary.empty:
-    total_clicks = df_summary["クリック数"].sum()
-    total_imps = df_summary["表示回数"].sum()
-    total_cost = df_summary["費用"].sum()
-    total_conv = df_summary["コンバージョン"].sum()
+with st.spinner('対象期間のデータを取得しています...'):
+    start_str_a = start_date_a.strftime("%Y-%m-%d")
+    end_str_a = end_date_a.strftime("%Y-%m-%d")
+    df_summary_a, df_keywords_a, ads_error_a, df_ga4_a, ga4_error_a = fetch_real_data(start_str_a, end_str_a)
     
-    ctr = (total_clicks / total_imps * 100) if total_imps > 0 else 0
-    cpc = (total_cost / total_clicks) if total_clicks > 0 else 0
-    cpa = (total_cost / total_conv) if total_conv > 0 else 0
-    cvr = (total_conv / total_clicks * 100) if total_clicks > 0 else 0
+if compare_mode:
+    with st.spinner('比較期間のデータを取得しています...'):
+        start_str_b = start_date_b.strftime("%Y-%m-%d")
+        end_str_b = end_date_b.strftime("%Y-%m-%d")
+        df_summary_b, df_keywords_b, ads_error_b, df_ga4_b, ga4_error_b = fetch_real_data(start_str_b, end_str_b)
+else:
+    df_summary_b = pd.DataFrame()
 
-    # ==========================================
-    # メインレイアウト (左カラム / 右カラム)
-    # ==========================================
-    col_main_left, col_main_right = st.columns([1, 1])
+if ads_error_a or df_summary_a.empty:
+    if ads_error_a:
+        st.error(f"⚠️ Google広告 APIエラー: (詳細: {ads_error_a})")
+    df_summary_a, df_keywords_a = generate_mock_ads_data(start_str_a, end_str_a)
+    if compare_mode:
+        df_summary_b, df_keywords_b = generate_mock_ads_data(start_str_b, end_str_b)
+
+def calc_metrics(df):
+    if df.empty: return 0, 0, 0, 0, 0, 0, 0
+    clk = df["クリック数"].sum()
+    imp = df["表示回数"].sum()
+    cst = df["費用"].sum()
+    cnv = df["コンバージョン"].sum()
+    ctr = (clk / imp * 100) if imp > 0 else 0
+    cpa = (cst / cnv) if cnv > 0 else 0
+    cvr = (cnv / clk * 100) if clk > 0 else 0
+    return clk, imp, cst, cnv, ctr, cpa, cvr
+
+clk_a, imp_a, cst_a, cnv_a, ctr_a, cpa_a, cvr_a = calc_metrics(df_summary_a)
+clk_b, imp_b, cst_b, cnv_b, ctr_b, cpa_b, cvr_b = calc_metrics(df_summary_b)
+
+def get_delta(val_a, val_b, is_currency=False, is_percent=False):
+    if not compare_mode or df_summary_b.empty: return None
+    diff = val_a - val_b
+    sign = "+" if diff > 0 else ""
+    if is_currency: return f"{sign}{diff:,.0f}円"
+    if is_percent: return f"{sign}{diff:.2f}%"
+    return f"{sign}{diff:,.0f}"
+
+# ==========================================
+# メインレイアウト (左カラム / 右カラム)
+# ==========================================
+col_main_left, col_main_right = st.columns([1, 1])
+
+with col_main_left:
+    st.markdown("### 📊 Google広告 パフォーマンス")
+    m1, m2 = st.columns(2)
+    m1.metric("総費用", f"¥{int(cst_a):,}", get_delta(cst_a, cst_b, is_currency=True), delta_color="inverse")
+    m2.metric("クリック数", f"{int(clk_a):,} 回", get_delta(clk_a, clk_b))
     
-    with col_main_left:
-        st.markdown("### 📊 Google広告 パフォーマンス")
-        m1, m2 = st.columns(2)
-        m1.metric("総費用", f"¥{int(total_cost):,}")
-        m2.metric("クリック数", f"{int(total_clicks):,} 回")
-        
-        st.markdown("<div style='height:15px'></div>", unsafe_allow_html=True)
-        m3, m4 = st.columns(2)
-        m3.metric("クリック率 (CTR)", f"{ctr:.2f} %")
-        m4.metric("コンバージョン", f"{int(total_conv)} 件")
-        
-        st.markdown("<div style='height:15px'></div>", unsafe_allow_html=True)
-        m5, m6 = st.columns(2)
-        m5.metric("コンバージョン率 (CVR)", f"{cvr:.2f} %")
-        m6.metric("コンバージョン単価 (CPA)", f"¥{int(cpa):,}" if cpa > 0 else "¥-")
+    st.markdown("<div style='height:15px'></div>", unsafe_allow_html=True)
+    m3, m4 = st.columns(2)
+    m3.metric("クリック率 (CTR)", f"{ctr_a:.2f} %", get_delta(ctr_a, ctr_b, is_percent=True))
+    m4.metric("コンバージョン", f"{int(cnv_a)} 件", get_delta(cnv_a, cnv_b))
+    
+    st.markdown("<div style='height:15px'></div>", unsafe_allow_html=True)
+    m5, m6 = st.columns(2)
+    m5.metric("コンバージョン率 (CVR)", f"{cvr_a:.2f} %", get_delta(cvr_a, cvr_b, is_percent=True))
+    cpa_display = f"¥{int(cpa_a):,}" if cpa_a > 0 else "¥-"
+    m6.metric("コンバージョン単価 (CPA)", cpa_display, get_delta(cpa_a, cpa_b, is_currency=True) if cpa_a > 0 and cpa_b > 0 else None, delta_color="inverse")
 
-        st.markdown("<div style='height:30px'></div>", unsafe_allow_html=True)
-        
-        st.markdown("### 📈 クリック数 と 費用の推移")
-        fig = go.Figure()
-        fig.add_trace(go.Bar(
-            x=df_summary["日付"], y=df_summary["費用"], 
-            name="費用 (¥)", marker_color="rgba(0, 243, 255, 0.4)", 
-            marker_line_color="#00f3ff", marker_line_width=1.5, yaxis="y1"
-        ))
-        fig.add_trace(go.Scatter(
-            x=df_summary["日付"], y=df_summary["クリック数"], 
-            name="クリック数", mode="lines+markers", 
-            line=dict(color="#ff007f", width=3), 
-            marker=dict(color="#ff007f", size=8, line=dict(color="#ffffff", width=1)),
-            yaxis="y2"
-        ))
-        fig.update_layout(
-            template="plotly_dark",
-            xaxis=dict(tickangle=0, type='category', showgrid=False, color="#64ffda"),
-            yaxis=dict(title="費用 (¥)", side="left", showgrid=True, gridcolor='rgba(0, 243, 255, 0.1)', color="#64ffda"),
-            yaxis2=dict(title="クリック数", side="right", overlaying="y", showgrid=False, color="#ff007f"),
-            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(color="#ffffff")),
-            margin=dict(l=0, r=0, t=30, b=0),
-            height=320,
-            plot_bgcolor="rgba(0,0,0,0)",
-            paper_bgcolor="rgba(0,0,0,0)"
+    st.markdown("<div style='height:30px'></div>", unsafe_allow_html=True)
+    
+    st.markdown("### 📈 クリック数 と 費用の推移")
+    fig = go.Figure()
+    fig.add_trace(go.Bar(
+        x=df_summary_a["日付"], y=df_summary_a["費用"], 
+        name="費用 (¥)", marker_color="rgba(0, 243, 255, 0.4)", 
+        marker_line_color="#00f3ff", marker_line_width=1.5, yaxis="y1"
+    ))
+    fig.add_trace(go.Scatter(
+        x=df_summary_a["日付"], y=df_summary_a["クリック数"], 
+        name="クリック数", mode="lines+markers", 
+        line=dict(color="#ff007f", width=3), 
+        marker=dict(color="#ff007f", size=8, line=dict(color="#ffffff", width=1)),
+        yaxis="y2"
+    ))
+    fig.update_layout(
+        template="plotly_dark",
+        xaxis=dict(tickangle=0, type='category', showgrid=False, color="#64ffda"),
+        yaxis=dict(title="費用 (¥)", side="left", showgrid=True, gridcolor='rgba(0, 243, 255, 0.1)', color="#64ffda"),
+        yaxis2=dict(title="クリック数", side="right", overlaying="y", showgrid=False, color="#ff007f"),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(color="#ffffff")),
+        margin=dict(l=0, r=0, t=30, b=0),
+        height=320,
+        plot_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor="rgba(0,0,0,0)"
+    )
+    st.plotly_chart(fig, use_container_width=True)
+
+    st.markdown("<div style='height:30px'></div>", unsafe_allow_html=True)
+
+    st.markdown("### 🌐 Webサイト アクセス解析")
+    if ga4_error_a:
+        st.error(f"⚠️ GA4 APIエラー: {ga4_error_a}")
+    elif not df_ga4_a.empty:
+        st.dataframe(
+            df_ga4_a, 
+            use_container_width=True, 
+            hide_index=True, 
+            column_config={"エンゲージメント率": st.column_config.NumberColumn(format="%.1f %%")},
+            height=250
         )
-        st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.info("指定された期間のGA4データはありません。")
 
-        st.markdown("<div style='height:30px'></div>", unsafe_allow_html=True)
-
-        st.markdown("### 🌐 Webサイト アクセス解析")
-        if ga4_error:
-            st.error(f"⚠️ GA4 APIエラー: {ga4_error}")
-        elif not df_ga4.empty:
-            st.dataframe(
-                df_ga4, 
-                use_container_width=True, 
-                hide_index=True, 
-                column_config={"エンゲージメント率": st.column_config.NumberColumn(format="%.1f %%")},
-                height=250
-            )
-        else:
-            st.info("指定された期間のGA4データはありません。")
-
-    with col_main_right:
-        st.markdown("### 🔍 キーワード別 パフォーマンス")
-        if not df_keywords.empty:
-            df_keywords["CPA"] = df_keywords.apply(lambda r: (r["費用"] / r["コンバージョン"]) if r["コンバージョン"] > 0 else 0, axis=1)
-            df_keywords = df_keywords.sort_values("費用", ascending=False)
-            st.dataframe(
-                df_keywords, 
-                use_container_width=True,
-                column_config={
-                    "費用": st.column_config.NumberColumn("費用", format="¥%d"),
-                    "CPA": st.column_config.NumberColumn("CPA", format="¥%d"),
-                },
-                hide_index=True,
-                height=960 # 高さを調整して左カラムと揃える
-            )
+with col_main_right:
+    st.markdown("### 🔍 キーワード別 パフォーマンス")
+    if not df_keywords_a.empty:
+        df_keywords_a["CPA"] = df_keywords_a.apply(lambda r: (r["費用"] / r["コンバージョン"]) if r["コンバージョン"] > 0 else 0, axis=1)
+        df_keywords_a = df_keywords_a.sort_values("費用", ascending=False)
+        st.dataframe(
+            df_keywords_a, 
+            use_container_width=True,
+            column_config={
+                "費用": st.column_config.NumberColumn("費用", format="¥%d"),
+                "CPA": st.column_config.NumberColumn("CPA", format="¥%d"),
+            },
+            hide_index=True,
+            height=960
+        )
 
 st.markdown("---")
 
@@ -278,12 +316,10 @@ if os.path.exists(report_path):
     with open(report_path, "r", encoding="utf-8") as f:
         report_content = f.read()
     
-    # 不要なテキストを削除
     report_content = report_content.replace("【今週（日〜金）の運用サマリー】", "").strip()
     report_content = report_content.replace("\n", "<br>")
     
-    date_header = f"<strong style='color:#00f3ff; font-size:1.15rem;'>【{start_date.strftime('%m月%d日')} 〜 {end_date.strftime('%m月%d日')}】</strong><br><br>"
-    # 白文字のレポートボックスで表示
+    date_header = f"<strong style='color:#00f3ff; font-size:1.15rem;'>【{start_date_a.strftime('%m月%d日')} 〜 {end_date_a.strftime('%m月%d日')}】</strong><br><br>"
     st.markdown(f"<div class='report-box'>{date_header}{report_content}</div>", unsafe_allow_html=True)
 else:
     st.markdown("<div class='report-box'>今週のレポートはまだ作成されていません。（※毎週土曜朝6時に更新されます）</div>", unsafe_allow_html=True)
