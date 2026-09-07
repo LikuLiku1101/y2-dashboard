@@ -15,7 +15,6 @@ st.markdown("""
 <style>
 .block-container { padding-top: 1.5rem; padding-bottom: 1.5rem; }
 .stApp { background-image: radial-gradient(circle at 50% 50%, #0a192f 0%, #020c1b 100%); }
-/* サマリー指標の余白を詰める */
 [data-testid="stMetric"] { background-color: rgba(2, 12, 27, 0.7); border-radius: 8px; padding: 10px 15px; box-shadow: 0 0 10px rgba(0, 243, 255, 0.15), inset 0 0 10px rgba(0, 243, 255, 0.05); border: 1px solid rgba(0, 243, 255, 0.5); backdrop-filter: blur(5px); margin-bottom: 0px; }
 [data-testid="stMetricLabel"] { font-size: 0.85rem; font-weight: bold; color: #64ffda !important; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: -5px; }
 [data-testid="stMetricValue"] { font-size: 1.7rem; font-weight: 800; color: #ffffff !important; text-shadow: 0 0 10px rgba(0, 243, 255, 0.6); }
@@ -46,7 +45,6 @@ presets = {
     "カスタム指定": None
 }
 
-# --- ヘッダー領域 (比較機能付き) ---
 h_left, h_mid1, h_mid2, h_right = st.columns([1.8, 1, 0.6, 1])
 with h_left:
     st.markdown("<div style='height: 15px;'></div>", unsafe_allow_html=True)
@@ -113,6 +111,8 @@ def fetch_real_data(start_str, end_str):
                     "コンバージョン": row.metrics.conversions
                 })
         ads_df_summary = pd.DataFrame(s_data)
+        if not ads_df_summary.empty:
+            ads_df_summary["CTR"] = (ads_df_summary["クリック数"] / ads_df_summary["表示回数"] * 100).fillna(0)
         
         query_kw = f'''
             SELECT ad_group_criterion.keyword.text, metrics.clicks, metrics.impressions, metrics.cost_micros, metrics.conversions
@@ -169,7 +169,8 @@ def generate_mock_ads_data(start_str, end_str):
         clicks = int(imps * random.uniform(0.01, 0.08))
         cost = clicks * random.randint(150, 400)
         conv = 1 if random.random() > 0.95 else 0
-        summary_data.append({"日付": d, "表示回数": imps, "クリック数": clicks, "費用": cost, "コンバージョン": conv})
+        ctr = (clicks / imps * 100) if imps > 0 else 0
+        summary_data.append({"日付": d, "表示回数": imps, "クリック数": clicks, "費用": cost, "コンバージョン": conv, "CTR": ctr})
     
     kw_data = []
     for kw in ["太陽光 費用", "蓄電池 補助金", "太陽光パネル 見積もり", "ソーラーパネル デメリット", "Y2ENERGY 評判", "神奈川 太陽光", "蓄電池 おすすめ"]:
@@ -224,15 +225,11 @@ def get_delta(val_a, val_b, is_currency=False, is_percent=False):
     if is_percent: return f"{sign}{diff:.2f}%"
     return f"{sign}{diff:,.0f}"
 
-# ==========================================
-# メインレイアウト (左カラム / 右カラム)
-# ==========================================
 col_main_left, col_main_right = st.columns([1, 1])
 
 with col_main_left:
     st.markdown("### 📊 Google広告 パフォーマンス")
     
-    # 2列 -> 3列に変更して余白を詰める
     m1, m2, m3 = st.columns(3)
     m1.metric("総費用", f"¥{int(cst_a):,}", get_delta(cst_a, cst_b, is_currency=True), delta_color="inverse")
     m2.metric("クリック数", f"{int(clk_a):,} 回", get_delta(clk_a, clk_b))
@@ -248,31 +245,36 @@ with col_main_left:
 
     st.markdown("<div style='height:25px'></div>", unsafe_allow_html=True)
     
-    st.markdown("### 📈 クリック数 と 費用の推移")
+    st.markdown("### 📈 パフォーマンス推移 <span style='font-size:0.95rem; color:#888; font-weight:normal;'>(※右上の凡例をクリックで表示切替)</span>", unsafe_allow_html=True)
     fig = go.Figure()
     
     if compare_mode and not df_summary_b.empty:
-        # 比較モードの時は日数をX軸にして重ね合わせる
         df_summary_a['Day'] = [f"{i+1}日目" for i in range(len(df_summary_a))]
         df_summary_b['Day'] = [f"{i+1}日目" for i in range(len(df_summary_b))]
         
-        # 比較データ (グレー系で背後に)
+        # 比較データ (グレー系)
         fig.add_trace(go.Bar(x=df_summary_b['Day'], y=df_summary_b["費用"], name="費用 (比較)", marker_color="rgba(100, 150, 200, 0.2)", yaxis="y1"))
         fig.add_trace(go.Scatter(x=df_summary_b['Day'], y=df_summary_b["クリック数"], name="クリック数 (比較)", mode="lines", line=dict(color="rgba(180, 180, 180, 0.5)", width=2, dash='dot'), yaxis="y2"))
+        fig.add_trace(go.Scatter(x=df_summary_b['Day'], y=df_summary_b["コンバージョン"], name="CV (比較)", mode="lines", line=dict(color="rgba(200, 200, 100, 0.5)", width=2, dash='dot'), yaxis="y2", visible="legendonly"))
+        fig.add_trace(go.Scatter(x=df_summary_b['Day'], y=df_summary_b["CTR"], name="CTR (比較)", mode="lines", line=dict(color="rgba(200, 100, 200, 0.5)", width=2, dash='dot'), yaxis="y2", visible="legendonly"))
         
-        # 対象データ (ネオンカラーで強調)
+        # 対象データ (ネオンカラー)
         fig.add_trace(go.Bar(x=df_summary_a['Day'], y=df_summary_a["費用"], name="費用 (対象)", marker_color="rgba(0, 243, 255, 0.6)", marker_line_color="#00f3ff", marker_line_width=1.5, yaxis="y1"))
         fig.add_trace(go.Scatter(x=df_summary_a['Day'], y=df_summary_a["クリック数"], name="クリック数 (対象)", mode="lines+markers", line=dict(color="#ff007f", width=3), marker=dict(color="#ff007f", size=7, line=dict(color="#ffffff", width=1)), yaxis="y2"))
+        fig.add_trace(go.Scatter(x=df_summary_a['Day'], y=df_summary_a["コンバージョン"], name="CV (対象)", mode="lines+markers", line=dict(color="#ffcf00", width=3), marker=dict(size=7), yaxis="y2", visible="legendonly"))
+        fig.add_trace(go.Scatter(x=df_summary_a['Day'], y=df_summary_a["CTR"], name="CTR (対象)", mode="lines+markers", line=dict(color="#b500ff", width=3), marker=dict(size=7), yaxis="y2", visible="legendonly"))
     else:
         fig.add_trace(go.Bar(x=df_summary_a["日付"], y=df_summary_a["費用"], name="費用 (¥)", marker_color="rgba(0, 243, 255, 0.4)", marker_line_color="#00f3ff", marker_line_width=1.5, yaxis="y1"))
         fig.add_trace(go.Scatter(x=df_summary_a["日付"], y=df_summary_a["クリック数"], name="クリック数", mode="lines+markers", line=dict(color="#ff007f", width=3), marker=dict(color="#ff007f", size=8, line=dict(color="#ffffff", width=1)), yaxis="y2"))
+        fig.add_trace(go.Scatter(x=df_summary_a["日付"], y=df_summary_a["コンバージョン"], name="コンバージョン", mode="lines+markers", line=dict(color="#ffcf00", width=3), marker=dict(color="#ffcf00", size=8), yaxis="y2", visible="legendonly"))
+        fig.add_trace(go.Scatter(x=df_summary_a["日付"], y=df_summary_a["CTR"], name="CTR (%)", mode="lines+markers", line=dict(color="#b500ff", width=3), marker=dict(color="#b500ff", size=8), yaxis="y2", visible="legendonly"))
 
     fig.update_layout(
         template="plotly_dark",
         xaxis=dict(tickangle=0, type='category', showgrid=False, color="#64ffda"),
         yaxis=dict(title="費用 (¥)", side="left", showgrid=True, gridcolor='rgba(0, 243, 255, 0.1)', color="#64ffda"),
-        yaxis2=dict(title="クリック数", side="right", overlaying="y", showgrid=False, color="#ff007f"),
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(color="#ffffff")),
+        yaxis2=dict(title="クリック数・CV・CTR", side="right", overlaying="y", showgrid=False, color="#ff007f"),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(color="#ffffff", size=11)),
         margin=dict(l=0, r=0, t=10, b=0),
         height=320,
         plot_bgcolor="rgba(0,0,0,0)",
@@ -321,7 +323,7 @@ with col_main_right:
                     "CPA(増減)": st.column_config.NumberColumn("CPA(増減)", format="¥%d"),
                 },
                 hide_index=True,
-                height=920
+                height=940
             )
         else:
             df_keywords_a = df_keywords_a.sort_values("費用", ascending=False)
@@ -333,14 +335,11 @@ with col_main_right:
                     "CPA": st.column_config.NumberColumn("CPA", format="¥%d"),
                 },
                 hide_index=True,
-                height=920
+                height=940
             )
 
 st.markdown("---")
 
-# ==========================================
-# 運用レポート
-# ==========================================
 st.markdown("### 📝 今週の運用レポート")
 report_path = "weekly_analysis.md"
 if os.path.exists(report_path):
