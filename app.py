@@ -1,4 +1,4 @@
-﻿import streamlit as st
+import streamlit as st
 import pandas as pd
 from google.ads.googleads.client import GoogleAdsClient
 from google.analytics.data_v1beta import BetaAnalyticsDataClient
@@ -280,10 +280,10 @@ if os.path.exists(report_path):
     
     # 不要なテキストを削除
     report_content = report_content.replace("【今週（日〜金）の運用サマリー】", "").strip()
+    report_content = report_content.replace("\n", "<br>")
     
-    date_header = f"**【{start_date.strftime('%m月%d日')} 〜 {end_date.strftime('%m月%d日')}】**\n\n"
+    date_header = f"<strong style='color:#00f3ff; font-size:1.15rem;'>【{start_date.strftime('%m月%d日')} 〜 {end_date.strftime('%m月%d日')}】</strong><br><br>"
     # 白文字のレポートボックスで表示
     st.markdown(f"<div class='report-box'>{date_header}{report_content}</div>", unsafe_allow_html=True)
 else:
     st.markdown("<div class='report-box'>今週のレポートはまだ作成されていません。（※毎週土曜朝6時に更新されます）</div>", unsafe_allow_html=True)
-
