@@ -13,58 +13,21 @@ st.set_page_config(page_title="広告ダッシュボード", layout="wide", init
 # --- サイバーパンク風 カスタムCSS ---
 st.markdown("""
 <style>
-/* 全体の余白調整と背景グラデーション */
 .block-container { padding-top: 2rem; padding-bottom: 2rem; }
-.stApp {
-    background-image: radial-gradient(circle at 50% 50%, #0a192f 0%, #020c1b 100%);
-}
-
-/* 指標(Metric)をネオン風カードにデザイン */
-[data-testid="stMetric"] {
-    background-color: rgba(2, 12, 27, 0.7);
-    border-radius: 8px;
-    padding: 15px 20px;
-    box-shadow: 0 0 10px rgba(0, 243, 255, 0.15), inset 0 0 10px rgba(0, 243, 255, 0.05);
-    border: 1px solid rgba(0, 243, 255, 0.5);
-    backdrop-filter: blur(5px);
-}
-[data-testid="stMetricLabel"] {
-    font-size: 0.95rem;
-    font-weight: bold;
-    color: #64ffda !important;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-}
-[data-testid="stMetricValue"] {
-    font-size: 2.2rem;
-    font-weight: 800;
-    color: #ffffff !important;
-    text-shadow: 0 0 10px rgba(0, 243, 255, 0.6);
-}
-
-/* 見出しをサイバー風に */
-h1, h3, h4 { 
-    color: #64ffda !important; 
-    font-family: 'Arial', sans-serif; 
-    text-shadow: 0 0 8px rgba(100, 255, 218, 0.3); 
-    letter-spacing: 1px;
-}
-
-/* 区切り線をネオン風に */
+.stApp { background-image: radial-gradient(circle at 50% 50%, #0a192f 0%, #020c1b 100%); }
+[data-testid="stMetric"] { background-color: rgba(2, 12, 27, 0.7); border-radius: 8px; padding: 15px 20px; box-shadow: 0 0 10px rgba(0, 243, 255, 0.15), inset 0 0 10px rgba(0, 243, 255, 0.05); border: 1px solid rgba(0, 243, 255, 0.5); backdrop-filter: blur(5px); }
+[data-testid="stMetricLabel"] { font-size: 0.95rem; font-weight: bold; color: #64ffda !important; text-transform: uppercase; letter-spacing: 1px; }
+[data-testid="stMetricValue"] { font-size: 2.2rem; font-weight: 800; color: #ffffff !important; text-shadow: 0 0 10px rgba(0, 243, 255, 0.6); }
+h1, h3, h4 { color: #64ffda !important; font-family: 'Arial', sans-serif; text-shadow: 0 0 8px rgba(100, 255, 218, 0.3); letter-spacing: 1px; }
+h1 { margin-bottom: 0 !important; padding-bottom: 0 !important; }
 hr { border-color: rgba(0, 243, 255, 0.2); box-shadow: 0 0 5px rgba(0, 243, 255, 0.4); margin-top: 1.5rem; margin-bottom: 1.5rem; }
-
-/* dataframeのヘッダー色修正 */
 thead tr th { background-color: #0a192f !important; color: #00f3ff !important; }
+.report-box { background-color: rgba(2, 12, 27, 0.5); border: 1px solid rgba(0, 243, 255, 0.3); padding: 25px; border-radius: 8px; color: #ffffff; line-height: 1.8; font-size: 1.05rem; }
+.date-info { color: #00f3ff; font-weight: bold; margin-top: 35px; text-shadow: 0 0 5px rgba(0, 243, 255, 0.5); font-size: 1.1rem; }
 </style>
 """, unsafe_allow_html=True)
 
-st.title("🌌 Y2ENERGY COMMAND CENTER")
-
-# --- 期間絞り込み (日曜始まりに修正) ---
-col_preset, col_custom = st.columns([1, 2])
 today = datetime.date.today()
-
-# Python weekday(): 0=Mon, 6=Sun
 days_since_sunday = (today.weekday() + 1) % 7
 this_week_start = today - datetime.timedelta(days=days_since_sunday)
 last_week_start = this_week_start - datetime.timedelta(days=7)
@@ -80,19 +43,22 @@ presets = {
     "カスタム指定": None
 }
 
-with col_preset:
+# --- ヘッダー領域 ---
+h_left, h_mid, h_right = st.columns([2, 0.8, 1.2])
+with h_left:
+    st.title("🌌 Y2ENERGY COMMAND CENTER")
+with h_mid:
     selected_preset = st.selectbox("期間を選択", list(presets.keys()), index=4)
-    
-with col_custom:
+with h_right:
     if selected_preset == "カスタム指定":
-        date_range = st.date_input("カレンダーから選択", value=(today - datetime.timedelta(days=30), today), max_value=today)
+        date_range = st.date_input("カレンダー", value=(today - datetime.timedelta(days=30), today), max_value=today)
         if len(date_range) == 2:
             start_date, end_date = date_range
         else:
             start_date = end_date = date_range[0]
     else:
         start_date, end_date = presets[selected_preset]
-        st.info(f"**対象期間:** {start_date.strftime('%Y-%m-%d')} 〜 {end_date.strftime('%Y-%m-%d')}")
+        st.markdown(f"<div class='date-info'>対象期間: {start_date.strftime('%Y-%m-%d')} 〜 {end_date.strftime('%Y-%m-%d')}</div>", unsafe_allow_html=True)
 
 st.markdown("---")
 
@@ -220,11 +186,11 @@ if not df_summary.empty:
     cvr = (total_conv / total_clicks * 100) if total_clicks > 0 else 0
 
     # ==========================================
-    # ROW 1: サマリー(左) と グラフ(右)
+    # メインレイアウト (左カラム / 右カラム)
     # ==========================================
-    row1_col1, row1_col2 = st.columns(2)
+    col_main_left, col_main_right = st.columns([1, 1])
     
-    with row1_col1:
+    with col_main_left:
         st.markdown("### 📊 Google広告 パフォーマンス")
         m1, m2 = st.columns(2)
         m1.metric("総費用", f"¥{int(total_cost):,}")
@@ -240,10 +206,10 @@ if not df_summary.empty:
         m5.metric("コンバージョン率 (CVR)", f"{cvr:.2f} %")
         m6.metric("コンバージョン単価 (CPA)", f"¥{int(cpa):,}" if cpa > 0 else "¥-")
 
-    with row1_col2:
+        st.markdown("<div style='height:30px'></div>", unsafe_allow_html=True)
+        
         st.markdown("### 📈 クリック数 と 費用の推移")
         fig = go.Figure()
-        # ネオンサイバー風のグラフ設定
         fig.add_trace(go.Bar(
             x=df_summary["日付"], y=df_summary["費用"], 
             name="費用 (¥)", marker_color="rgba(0, 243, 255, 0.4)", 
@@ -263,20 +229,29 @@ if not df_summary.empty:
             yaxis2=dict(title="クリック数", side="right", overlaying="y", showgrid=False, color="#ff007f"),
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(color="#ffffff")),
             margin=dict(l=0, r=0, t=30, b=0),
-            height=380,
+            height=320,
             plot_bgcolor="rgba(0,0,0,0)",
             paper_bgcolor="rgba(0,0,0,0)"
         )
         st.plotly_chart(fig, use_container_width=True)
 
-    st.markdown("---")
+        st.markdown("<div style='height:30px'></div>", unsafe_allow_html=True)
 
-    # ==========================================
-    # ROW 2: キーワード(左) と GA4(右)
-    # ==========================================
-    row2_col1, row2_col2 = st.columns(2)
-    
-    with row2_col1:
+        st.markdown("### 🌐 Webサイト アクセス解析")
+        if ga4_error:
+            st.error(f"⚠️ GA4 APIエラー: {ga4_error}")
+        elif not df_ga4.empty:
+            st.dataframe(
+                df_ga4, 
+                use_container_width=True, 
+                hide_index=True, 
+                column_config={"エンゲージメント率": st.column_config.NumberColumn(format="%.1f %%")},
+                height=250
+            )
+        else:
+            st.info("指定された期間のGA4データはありません。")
+
+    with col_main_right:
         st.markdown("### 🔍 キーワード別 パフォーマンス")
         if not df_keywords.empty:
             df_keywords["CPA"] = df_keywords.apply(lambda r: (r["費用"] / r["コンバージョン"]) if r["コンバージョン"] > 0 else 0, axis=1)
@@ -289,36 +264,26 @@ if not df_summary.empty:
                     "CPA": st.column_config.NumberColumn("CPA", format="¥%d"),
                 },
                 hide_index=True,
-                height=350
+                height=960 # 高さを調整して左カラムと揃える
             )
-            
-    with row2_col2:
-        st.markdown("### 🌐 Webサイト アクセス解析")
-        if ga4_error:
-            st.error(f"⚠️ GA4 APIエラー: {ga4_error}")
-        elif not df_ga4.empty:
-            st.dataframe(
-                df_ga4, 
-                use_container_width=True, 
-                hide_index=True, 
-                column_config={"エンゲージメント率": st.column_config.NumberColumn(format="%.1f %%")},
-                height=350
-            )
-        else:
-            st.info("指定された期間のGA4データはありません。")
 
 st.markdown("---")
 
 # ==========================================
-# ROW 3: 運用レポート
+# 運用レポート
 # ==========================================
 st.markdown("### 📝 今週の運用レポート")
 report_path = "weekly_analysis.md"
 if os.path.exists(report_path):
     with open(report_path, "r", encoding="utf-8") as f:
         report_content = f.read()
+    
+    # 不要なテキストを削除
+    report_content = report_content.replace("【今週（日〜金）の運用サマリー】", "").strip()
+    
     date_header = f"**【{start_date.strftime('%m月%d日')} 〜 {end_date.strftime('%m月%d日')}】**\n\n"
-    st.info(date_header + report_content)
+    # 白文字のレポートボックスで表示
+    st.markdown(f"<div class='report-box'>{date_header}{report_content}</div>", unsafe_allow_html=True)
 else:
-    st.info("今週のレポートはまだ作成されていません。（※毎週土曜朝6時に更新されます）")
+    st.markdown("<div class='report-box'>今週のレポートはまだ作成されていません。（※毎週土曜朝6時に更新されます）</div>", unsafe_allow_html=True)
 
