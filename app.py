@@ -1,4 +1,4 @@
-﻿import streamlit as st
+import streamlit as st
 import pandas as pd
 from google.ads.googleads.client import GoogleAdsClient
 from google.analytics.data_v1beta import BetaAnalyticsDataClient
@@ -355,7 +355,9 @@ if os.path.exists(report_path):
     report_content = report_content.replace("【今週（日〜金）の運用サマリー】", "").strip()
     report_content = report_content.replace("\n", "<br>")
     
-    date_header = f"<strong style='color:#00f3ff; font-size:1.15rem;'>【{start_date_a.strftime('%m月%d日')} 〜 {end_date_a.strftime('%m月%d日')}】</strong><br><br>"
+    days_since_saturday = (today.weekday() - 5) % 7
+    most_recent_saturday = today - datetime.timedelta(days=days_since_saturday)
+    date_header = f"<div style='text-align: right; color: #888; font-size: 0.95rem; margin-bottom: 5px;'>記載日：{most_recent_saturday.strftime('%m月%d日')}</div><strong style='color:#00f3ff; font-size:1.15rem;'>【{start_date_a.strftime('%m月%d日')} 〜 {end_date_a.strftime('%m月%d日')}】</strong><br><br>"
     st.markdown(f"<div class='report-box'>{date_header}{report_content}</div>", unsafe_allow_html=True)
 else:
     st.markdown("<div class='report-box'>今週のレポートはまだ作成されていません。（※毎週土曜朝6時に更新されます）</div>", unsafe_allow_html=True)
