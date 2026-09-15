@@ -357,7 +357,10 @@ if os.path.exists(report_path):
     
     days_since_saturday = (today.weekday() - 5) % 7
     most_recent_saturday = today - datetime.timedelta(days=days_since_saturday)
-    date_header = f"<div style='text-align: right; color: #888; font-size: 0.95rem; margin-bottom: 5px;'>記載日：{most_recent_saturday.strftime('%m月%d日')}</div><strong style='color:#00f3ff; font-size:1.15rem;'>【{start_date_a.strftime('%m月%d日')} 〜 {end_date_a.strftime('%m月%d日')}】</strong><br><br>"
+    report_start_date = most_recent_saturday - datetime.timedelta(days=7)
+    report_end_date = most_recent_saturday - datetime.timedelta(days=1)
+    
+    date_header = f"<div style='text-align: right; color: #888; font-size: 0.95rem; margin-bottom: 5px;'>記載日：{most_recent_saturday.strftime('%m月%d日')}</div><strong style='color:#00f3ff; font-size:1.15rem;'>【{report_start_date.strftime('%m月%d日')} 〜 {report_end_date.strftime('%m月%d日')}】</strong><br><br>"
     st.markdown(f"<div class='report-box'>{date_header}{report_content}</div>", unsafe_allow_html=True)
 else:
     st.markdown("<div class='report-box'>今週のレポートはまだ作成されていません。（※毎週土曜朝6時に更新されます）</div>", unsafe_allow_html=True)
