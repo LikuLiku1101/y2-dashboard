@@ -1,4 +1,4 @@
-import streamlit as st
+﻿import streamlit as st
 import pandas as pd
 from google.ads.googleads.client import GoogleAdsClient
 from google.analytics.data_v1beta import BetaAnalyticsDataClient
@@ -27,6 +27,9 @@ hr { border-color: rgba(0, 243, 255, 0.2); box-shadow: 0 0 5px rgba(0, 243, 255,
 thead tr th { background-color: #0a192f !important; color: #00f3ff !important; }
 .report-box { background-color: rgba(2, 12, 27, 0.5); border: 1px solid rgba(0, 243, 255, 0.3); padding: 25px; border-radius: 8px; color: #ffffff; line-height: 1.8; font-size: 1.05rem; }
 .date-info { color: #00f3ff; text-shadow: 0 0 5px rgba(0, 243, 255, 0.5); font-size: 0.9rem; margin-top: -10px; margin-bottom: 15px; }
+.stTabs [data-baseweb="tab-list"] { gap: 8px; }
+.stTabs [data-baseweb="tab"] { background-color: rgba(2, 12, 27, 0.5); border-radius: 4px 4px 0 0; padding: 10px 20px; color: #fff; }
+.stTabs [aria-selected="true"] { background-color: rgba(0, 243, 255, 0.1) !important; border-top: 2px solid #00f3ff; color: #00f3ff !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -89,18 +92,17 @@ def fetch_real_data(start_str, end_str):
     ads_error = None
     
     try:
-        # Streamlit SecretsからGoogle Adsの認証情報を取得
         ads_credentials = dict(st.secrets["google_ads"])
         ads_credentials["use_proto_plus"] = True
         client = GoogleAdsClient.load_from_dict(ads_credentials)
         ga_service = client.get_service("GoogleAdsService")
         
-        query_summary = f'''
+        query_summary = f"""
             SELECT segments.date, metrics.clicks, metrics.impressions, metrics.cost_micros, metrics.conversions
             FROM customer 
             WHERE segments.date >= '{start_str}' AND segments.date <= '{end_str}'
             ORDER BY segments.date ASC
-        '''
+        """
         res_summary = ga_service.search_stream(customer_id=ADS_CUSTOMER_ID, query=query_summary)
         s_data = []
         for batch in res_summary:
@@ -116,11 +118,11 @@ def fetch_real_data(start_str, end_str):
         if not ads_df_summary.empty:
             ads_df_summary["CTR"] = (ads_df_summary["クリック数"] / ads_df_summary["表示回数"] * 100).fillna(0)
         
-        query_kw = f'''
+        query_kw = f"""
             SELECT ad_group_criterion.keyword.text, metrics.clicks, metrics.impressions, metrics.cost_micros, metrics.conversions
             FROM keyword_view
             WHERE segments.date >= '{start_str}' AND segments.date <= '{end_str}'
-        '''
+        """
         res_kw = ga_service.search_stream(customer_id=ADS_CUSTOMER_ID, query=query_kw)
         k_data = []
         for batch in res_kw:
@@ -139,7 +141,6 @@ def fetch_real_data(start_str, end_str):
     ga4_df = pd.DataFrame()
     ga4_error = None
     try:
-        # Streamlit SecretsからGA4の認証情報を取得
         ga4_credentials = dict(st.secrets["gcp_service_account"])
         creds = service_account.Credentials.from_service_account_info(ga4_credentials)
         ga4_client = BetaAnalyticsDataClient(credentials=creds)
@@ -189,18 +190,46 @@ def generate_mock_ads_data(start_str, end_str):
     
     return pd.DataFrame(summary_data), pd.DataFrame(kw_data)
 
-with st.spinner('対象期間のデータを取得しています...'):
+def generate_mock_meta_ads_data(start_str, end_str):
+    delta = (datetime.datetime.strptime(end_str, "%Y-%m-%d").date() - datetime.datetime.strptime(start_str, "%Y-%m-%d").date()).days
+    if delta < 0: delta = 0
+    dates = [(datetime.datetime.strptime(start_str, "%Y-%m-%d").date() + datetime.timedelta(days=x)).strftime("%Y-%m-%d") for x in range(delta + 1)]
+    
+    summary_data = []
+    for d in dates:
+        imps = random.randint(500, 2000)
+        clicks = int(imps * random.uniform(0.005, 0.03))
+        cost = clicks * random.randint(80, 250)
+        conv = 1 if random.random() > 0.8 else 0
+        ctr = (clicks / imps * 100) if imps > 0 else 0
+        summary_data.append({"日付": d, "表示回数": imps, "クリック数": clicks, "費用": cost, "コンバージョン": conv, "CTR": ctr})
+    
+    campaign_data = []
+    for cmp in ["リターゲティング_全期間", "類似オーディエンス_1%", "興味関心_エコ・環境", "ブロード配信_関東"]:
+        c_imps = random.randint(1000, 5000)
+        c_clicks = int(c_imps * random.uniform(0.005, 0.02))
+        c_cost = c_clicks * random.randint(100, 300)
+        c_conv = 1 if random.random() > 0.7 else 0
+        if c_clicks > 0:
+            campaign_data.append({"キャンペーン": cmp, "表示回数": c_imps, "クリック数": c_clicks, "費用": c_cost, "コンバージョン": c_conv})
+    
+    return pd.DataFrame(summary_data), pd.DataFrame(campaign_data)
+
+with st.spinner("対象期間のデータを取得しています..."):
     start_str_a = start_date_a.strftime("%Y-%m-%d")
     end_str_a = end_date_a.strftime("%Y-%m-%d")
     df_summary_a, df_keywords_a, ads_error_a, df_ga4_a, ga4_error_a = fetch_real_data(start_str_a, end_str_a)
+    df_meta_summary_a, df_meta_campaign_a = generate_mock_meta_ads_data(start_str_a, end_str_a)
     
 if compare_mode:
-    with st.spinner('比較期間のデータを取得しています...'):
+    with st.spinner("比較期間のデータを取得しています..."):
         start_str_b = start_date_b.strftime("%Y-%m-%d")
         end_str_b = end_date_b.strftime("%Y-%m-%d")
         df_summary_b, df_keywords_b, ads_error_b, df_ga4_b, ga4_error_b = fetch_real_data(start_str_b, end_str_b)
+        df_meta_summary_b, df_meta_campaign_b = generate_mock_meta_ads_data(start_str_b, end_str_b)
 else:
     df_summary_b = pd.DataFrame()
+    df_meta_summary_b = pd.DataFrame()
 
 if ads_error_a or df_summary_a.empty:
     if ads_error_a:
@@ -220,129 +249,165 @@ def calc_metrics(df):
     cvr = (cnv / clk * 100) if clk > 0 else 0
     return clk, imp, cst, cnv, ctr, cpa, cvr
 
-clk_a, imp_a, cst_a, cnv_a, ctr_a, cpa_a, cvr_a = calc_metrics(df_summary_a)
-clk_b, imp_b, cst_b, cnv_b, ctr_b, cpa_b, cvr_b = calc_metrics(df_summary_b)
-
-def get_delta(val_a, val_b, is_currency=False, is_percent=False):
-    if not compare_mode or df_summary_b.empty: return None
+def get_delta(val_a, val_b, df_b, is_currency=False, is_percent=False):
+    if not compare_mode or df_b.empty: return None
     diff = val_a - val_b
     sign = "+" if diff > 0 else ""
     if is_currency: return f"{sign}{diff:,.0f}円"
     if is_percent: return f"{sign}{diff:.2f}%"
     return f"{sign}{diff:,.0f}"
 
-col_main_left, col_main_right = st.columns([1, 1])
-
-with col_main_left:
-    st.markdown("### 📊 Google広告 パフォーマンス")
-    
-    m1, m2, m3 = st.columns(3)
-    m1.metric("総費用", f"¥{int(cst_a):,}", get_delta(cst_a, cst_b, is_currency=True), delta_color="inverse")
-    m2.metric("クリック数", f"{int(clk_a):,} 回", get_delta(clk_a, clk_b))
-    m3.metric("クリック率 (CTR)", f"{ctr_a:.2f} %", get_delta(ctr_a, ctr_b, is_percent=True))
-    
-    st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
-    
-    m4, m5, m6 = st.columns(3)
-    m4.metric("コンバージョン", f"{int(cnv_a)} 件", get_delta(cnv_a, cnv_b))
-    m5.metric("コンバージョン率(CVR)", f"{cvr_a:.2f} %", get_delta(cvr_a, cvr_b, is_percent=True))
-    cpa_display = f"¥{int(cpa_a):,}" if cpa_a > 0 else "¥-"
-    m6.metric("獲得単価 (CPA)", cpa_display, get_delta(cpa_a, cpa_b, is_currency=True) if cpa_a > 0 and cpa_b > 0 else None, delta_color="inverse")
-
-    st.markdown("<div style='height:25px'></div>", unsafe_allow_html=True)
-    
-    st.markdown("### 📈 パフォーマンス推移 <span style='font-size:0.95rem; color:#888; font-weight:normal;'>(※右上の凡例をクリックで表示切替)</span>", unsafe_allow_html=True)
+def render_chart(df_a, df_b, title_prefix=""):
     fig = go.Figure()
-    
-    if compare_mode and not df_summary_b.empty:
-        df_summary_a['Day'] = [f"{i+1}日目" for i in range(len(df_summary_a))]
-        df_summary_b['Day'] = [f"{i+1}日目" for i in range(len(df_summary_b))]
+    if compare_mode and not df_b.empty:
+        df_a_plot = df_a.copy()
+        df_b_plot = df_b.copy()
+        df_a_plot["Day"] = [f"{i+1}日目" for i in range(len(df_a_plot))]
+        df_b_plot["Day"] = [f"{i+1}日目" for i in range(len(df_b_plot))]
         
-        # 比較データ
-        fig.add_trace(go.Bar(x=df_summary_b['Day'], y=df_summary_b["費用"], name="費用 (比較)", marker_color="rgba(100, 150, 200, 0.2)", yaxis="y1"))
-        fig.add_trace(go.Scatter(x=df_summary_b['Day'], y=df_summary_b["クリック数"], name="クリック数 (比較)", mode="lines", line=dict(color="rgba(180, 180, 180, 0.5)", width=2, dash='dot'), yaxis="y2"))
-        fig.add_trace(go.Scatter(x=df_summary_b['Day'], y=df_summary_b["コンバージョン"], name="CV (比較)", mode="lines", line=dict(color="rgba(200, 200, 100, 0.5)", width=2, dash='dot'), yaxis="y2", visible="legendonly"))
-        fig.add_trace(go.Scatter(x=df_summary_b['Day'], y=df_summary_b["CTR"], name="CTR (比較)", mode="lines", line=dict(color="rgba(200, 100, 200, 0.5)", width=2, dash='dot'), yaxis="y2", visible="legendonly"))
+        fig.add_trace(go.Bar(x=df_b_plot["Day"], y=df_b_plot["費用"], name=f"費用 (比較)", marker_color="rgba(100, 150, 200, 0.2)", yaxis="y1"))
+        fig.add_trace(go.Scatter(x=df_b_plot["Day"], y=df_b_plot["クリック数"], name=f"クリック数 (比較)", mode="lines", line=dict(color="rgba(180, 180, 180, 0.5)", width=2, dash="dot"), yaxis="y2"))
+        fig.add_trace(go.Scatter(x=df_b_plot["Day"], y=df_b_plot["コンバージョン"], name=f"CV (比較)", mode="lines", line=dict(color="rgba(200, 200, 100, 0.5)", width=2, dash="dot"), yaxis="y2", visible="legendonly"))
+        fig.add_trace(go.Scatter(x=df_b_plot["Day"], y=df_b_plot["CTR"], name=f"CTR (比較)", mode="lines", line=dict(color="rgba(200, 100, 200, 0.5)", width=2, dash="dot"), yaxis="y2", visible="legendonly"))
         
-        # 対象データ
-        fig.add_trace(go.Bar(x=df_summary_a['Day'], y=df_summary_a["費用"], name="費用 (対象)", marker_color="rgba(0, 243, 255, 0.6)", marker_line_color="#00f3ff", marker_line_width=1.5, yaxis="y1"))
-        fig.add_trace(go.Scatter(x=df_summary_a['Day'], y=df_summary_a["クリック数"], name="クリック数 (対象)", mode="lines+markers", line=dict(color="#ff007f", width=3), marker=dict(color="#ff007f", size=7, line=dict(color="#ffffff", width=1)), yaxis="y2"))
-        fig.add_trace(go.Scatter(x=df_summary_a['Day'], y=df_summary_a["コンバージョン"], name="CV (対象)", mode="lines+markers", line=dict(color="#ffcf00", width=3), marker=dict(size=7), yaxis="y2", visible="legendonly"))
-        fig.add_trace(go.Scatter(x=df_summary_a['Day'], y=df_summary_a["CTR"], name="CTR (対象)", mode="lines+markers", line=dict(color="#b500ff", width=3), marker=dict(size=7), yaxis="y2", visible="legendonly"))
+        fig.add_trace(go.Bar(x=df_a_plot["Day"], y=df_a_plot["費用"], name=f"費用 (対象)", marker_color="rgba(0, 243, 255, 0.6)", marker_line_color="#00f3ff", marker_line_width=1.5, yaxis="y1"))
+        fig.add_trace(go.Scatter(x=df_a_plot["Day"], y=df_a_plot["クリック数"], name=f"クリック数 (対象)", mode="lines+markers", line=dict(color="#ff007f", width=3), marker=dict(color="#ff007f", size=7, line=dict(color="#ffffff", width=1)), yaxis="y2"))
+        fig.add_trace(go.Scatter(x=df_a_plot["Day"], y=df_a_plot["コンバージョン"], name=f"CV (対象)", mode="lines+markers", line=dict(color="#ffcf00", width=3), marker=dict(size=7), yaxis="y2", visible="legendonly"))
+        fig.add_trace(go.Scatter(x=df_a_plot["Day"], y=df_a_plot["CTR"], name=f"CTR (対象)", mode="lines+markers", line=dict(color="#b500ff", width=3), marker=dict(size=7), yaxis="y2", visible="legendonly"))
     else:
-        fig.add_trace(go.Bar(x=df_summary_a["日付"], y=df_summary_a["費用"], name="費用 (¥)", marker_color="rgba(0, 243, 255, 0.4)", marker_line_color="#00f3ff", marker_line_width=1.5, yaxis="y1"))
-        fig.add_trace(go.Scatter(x=df_summary_a["日付"], y=df_summary_a["クリック数"], name="クリック数", mode="lines+markers", line=dict(color="#ff007f", width=3), marker=dict(color="#ff007f", size=8, line=dict(color="#ffffff", width=1)), yaxis="y2"))
-        fig.add_trace(go.Scatter(x=df_summary_a["日付"], y=df_summary_a["コンバージョン"], name="コンバージョン", mode="lines+markers", line=dict(color="#ffcf00", width=3), marker=dict(color="#ffcf00", size=8), yaxis="y2", visible="legendonly"))
-        fig.add_trace(go.Scatter(x=df_summary_a["日付"], y=df_summary_a["CTR"], name="CTR (%)", mode="lines+markers", line=dict(color="#b500ff", width=3), marker=dict(color="#b500ff", size=8), yaxis="y2", visible="legendonly"))
+        fig.add_trace(go.Bar(x=df_a["日付"], y=df_a["費用"], name="費用 (¥)", marker_color="rgba(0, 243, 255, 0.4)", marker_line_color="#00f3ff", marker_line_width=1.5, yaxis="y1"))
+        fig.add_trace(go.Scatter(x=df_a["日付"], y=df_a["クリック数"], name="クリック数", mode="lines+markers", line=dict(color="#ff007f", width=3), marker=dict(color="#ff007f", size=8, line=dict(color="#ffffff", width=1)), yaxis="y2"))
+        fig.add_trace(go.Scatter(x=df_a["日付"], y=df_a["コンバージョン"], name="コンバージョン", mode="lines+markers", line=dict(color="#ffcf00", width=3), marker=dict(color="#ffcf00", size=8), yaxis="y2", visible="legendonly"))
+        fig.add_trace(go.Scatter(x=df_a["日付"], y=df_a["CTR"], name="CTR (%)", mode="lines+markers", line=dict(color="#b500ff", width=3), marker=dict(color="#b500ff", size=8), yaxis="y2", visible="legendonly"))
 
     fig.update_layout(
         template="plotly_dark",
-        xaxis=dict(tickangle=0, type='category', showgrid=False, color="#64ffda"),
-        yaxis=dict(title="費用 (¥)", side="left", showgrid=True, gridcolor='rgba(0, 243, 255, 0.1)', color="#64ffda"),
+        xaxis=dict(tickangle=0, type="category", showgrid=False, color="#64ffda"),
+        yaxis=dict(title="費用 (¥)", side="left", showgrid=True, gridcolor="rgba(0, 243, 255, 0.1)", color="#64ffda"),
         yaxis2=dict(title="クリック数・CV・CTR", side="right", overlaying="y", showgrid=False, color="#ff007f"),
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(color="#ffffff", size=11)),
         margin=dict(l=0, r=0, t=10, b=0),
         height=320,
         plot_bgcolor="rgba(0,0,0,0)",
         paper_bgcolor="rgba(0,0,0,0)",
-        barmode='group'
+        barmode="group"
     )
-    st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 
-    st.markdown("<div style='height:20px'></div>", unsafe_allow_html=True)
+tab_google, tab_meta = st.tabs(["📊 Google広告", "🔵 Meta広告 (連携準備中)"])
 
-    st.markdown("### 🌐 Webサイト アクセス解析")
-    if ga4_error_a:
-        st.error(f"⚠️ GA4 APIエラー: {ga4_error_a}")
-    elif not df_ga4_a.empty:
-        if compare_mode and not df_ga4_b.empty:
-            m_ga4 = pd.merge(df_ga4_a, df_ga4_b, on="流入元", how="left", suffixes=("", " (比較)"))
-            m_ga4.fillna(0, inplace=True)
-            m_ga4["セッション(増減)"] = m_ga4["セッション数"] - m_ga4["セッション数 (比較)"]
-            show_ga4 = m_ga4[["流入元", "セッション数", "セッション(増減)", "エンゲージメント率"]]
-            st.dataframe(show_ga4, use_container_width=True, hide_index=True, column_config={"エンゲージメント率": st.column_config.NumberColumn(format="%.1f %%")}, height=250)
-        else:
-            st.dataframe(df_ga4_a, use_container_width=True, hide_index=True, column_config={"エンゲージメント率": st.column_config.NumberColumn(format="%.1f %%")}, height=250)
-    else:
-        st.info("指定された期間のGA4データはありません。")
-
-with col_main_right:
-    st.markdown("### 🔍 キーワード別 パフォーマンス")
-    if not df_keywords_a.empty:
-        df_keywords_a["CPA"] = df_keywords_a.apply(lambda r: (r["費用"] / r["コンバージョン"]) if r["コンバージョン"] > 0 else 0, axis=1)
+with tab_google:
+    clk_a, imp_a, cst_a, cnv_a, ctr_a, cpa_a, cvr_a = calc_metrics(df_summary_a)
+    clk_b, imp_b, cst_b, cnv_b, ctr_b, cpa_b, cvr_b = calc_metrics(df_summary_b)
+    
+    col_g_left, col_g_right = st.columns([1, 1])
+    with col_g_left:
+        st.markdown("### 📊 Google広告 パフォーマンス")
+        m1, m2, m3 = st.columns(3)
+        m1.metric("総費用", f"¥{int(cst_a):,}", get_delta(cst_a, cst_b, df_summary_b, is_currency=True), delta_color="inverse")
+        m2.metric("クリック数", f"{int(clk_a):,} 回", get_delta(clk_a, clk_b, df_summary_b))
+        m3.metric("クリック率 (CTR)", f"{ctr_a:.2f} %", get_delta(ctr_a, ctr_b, df_summary_b, is_percent=True))
         
-        if compare_mode and not df_keywords_b.empty:
-            df_keywords_b["CPA"] = df_keywords_b.apply(lambda r: (r["費用"] / r["コンバージョン"]) if r["コンバージョン"] > 0 else 0, axis=1)
-            m_kw = pd.merge(df_keywords_a, df_keywords_b, on="キーワード", how="left", suffixes=("", " (比較)"))
-            m_kw.fillna(0, inplace=True)
-            m_kw["費用(増減)"] = m_kw["費用"] - m_kw["費用 (比較)"]
-            m_kw["CPA(増減)"] = m_kw["CPA"] - m_kw["CPA (比較)"]
-            
-            show_kw = m_kw[["キーワード", "費用", "費用(増減)", "CPA", "CPA(増減)"]].sort_values("費用", ascending=False)
-            st.dataframe(
-                show_kw, 
-                use_container_width=True,
-                column_config={
+        st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+        
+        m4, m5, m6 = st.columns(3)
+        m4.metric("コンバージョン", f"{int(cnv_a)} 件", get_delta(cnv_a, cnv_b, df_summary_b))
+        m5.metric("コンバージョン率(CVR)", f"{cvr_a:.2f} %", get_delta(cvr_a, cvr_b, df_summary_b, is_percent=True))
+        cpa_display = f"¥{int(cpa_a):,}" if cpa_a > 0 else "¥-"
+        m6.metric("獲得単価 (CPA)", cpa_display, get_delta(cpa_a, cpa_b, df_summary_b, is_currency=True) if cpa_a > 0 and cpa_b > 0 else None, delta_color="inverse")
+    
+        st.markdown("<div style='height:25px'></div>", unsafe_allow_html=True)
+        st.markdown("### 📈 パフォーマンス推移 <span style='font-size:0.95rem; color:#888; font-weight:normal;'>(※右上の凡例をクリックで表示切替)</span>", unsafe_allow_html=True)
+        render_chart(df_summary_a, df_summary_b, "Google広告")
+        
+    with col_g_right:
+        st.markdown("### 🔍 キーワード別 パフォーマンス")
+        if not df_keywords_a.empty:
+            df_keywords_a["CPA"] = df_keywords_a.apply(lambda r: (r["費用"] / r["コンバージョン"]) if r["コンバージョン"] > 0 else 0, axis=1)
+            if compare_mode and not df_keywords_b.empty:
+                df_keywords_b["CPA"] = df_keywords_b.apply(lambda r: (r["費用"] / r["コンバージョン"]) if r["コンバージョン"] > 0 else 0, axis=1)
+                m_kw = pd.merge(df_keywords_a, df_keywords_b, on="キーワード", how="left", suffixes=("", " (比較)"))
+                m_kw.fillna(0, inplace=True)
+                m_kw["費用(増減)"] = m_kw["費用"] - m_kw["費用 (比較)"]
+                m_kw["CPA(増減)"] = m_kw["CPA"] - m_kw["CPA (比較)"]
+                show_kw = m_kw[["キーワード", "費用", "費用(増減)", "CPA", "CPA(増減)"]].sort_values("費用", ascending=False)
+                st.dataframe(show_kw, use_container_width=True, hide_index=True, height=500, column_config={
                     "費用": st.column_config.NumberColumn("費用", format="¥%d"),
                     "費用(増減)": st.column_config.NumberColumn("費用(増減)", format="¥%d"),
                     "CPA": st.column_config.NumberColumn("CPA", format="¥%d"),
                     "CPA(増減)": st.column_config.NumberColumn("CPA(増減)", format="¥%d"),
-                },
-                hide_index=True,
-                height=940
-            )
-        else:
-            df_keywords_a = df_keywords_a.sort_values("費用", ascending=False)
-            st.dataframe(
-                df_keywords_a, 
-                use_container_width=True,
-                column_config={
+                })
+            else:
+                df_keywords_a = df_keywords_a.sort_values("費用", ascending=False)
+                st.dataframe(df_keywords_a, use_container_width=True, hide_index=True, height=500, column_config={
                     "費用": st.column_config.NumberColumn("費用", format="¥%d"),
                     "CPA": st.column_config.NumberColumn("CPA", format="¥%d"),
-                },
-                hide_index=True,
-                height=940
-            )
+                })
+
+with tab_meta:
+    m_clk_a, m_imp_a, m_cst_a, m_cnv_a, m_ctr_a, m_cpa_a, m_cvr_a = calc_metrics(df_meta_summary_a)
+    m_clk_b, m_imp_b, m_cst_b, m_cnv_b, m_ctr_b, m_cpa_b, m_cvr_b = calc_metrics(df_meta_summary_b)
+    
+    col_m_left, col_m_right = st.columns([1, 1])
+    with col_m_left:
+        st.markdown("### 🔵 Meta広告 パフォーマンス (Mock)")
+        mm1, mm2, mm3 = st.columns(3)
+        mm1.metric("総費用", f"¥{int(m_cst_a):,}", get_delta(m_cst_a, m_cst_b, df_meta_summary_b, is_currency=True), delta_color="inverse")
+        mm2.metric("クリック数", f"{int(m_clk_a):,} 回", get_delta(m_clk_a, m_clk_b, df_meta_summary_b))
+        mm3.metric("クリック率 (CTR)", f"{m_ctr_a:.2f} %", get_delta(m_ctr_a, m_ctr_b, df_meta_summary_b, is_percent=True))
+        
+        st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+        
+        mm4, mm5, mm6 = st.columns(3)
+        mm4.metric("コンバージョン", f"{int(m_cnv_a)} 件", get_delta(m_cnv_a, m_cnv_b, df_meta_summary_b))
+        mm5.metric("コンバージョン率(CVR)", f"{m_cvr_a:.2f} %", get_delta(m_cvr_a, m_cvr_b, df_meta_summary_b, is_percent=True))
+        m_cpa_display = f"¥{int(m_cpa_a):,}" if m_cpa_a > 0 else "¥-"
+        mm6.metric("獲得単価 (CPA)", m_cpa_display, get_delta(m_cpa_a, m_cpa_b, df_meta_summary_b, is_currency=True) if m_cpa_a > 0 and m_cpa_b > 0 else None, delta_color="inverse")
+    
+        st.markdown("<div style='height:25px'></div>", unsafe_allow_html=True)
+        st.markdown("### 📈 パフォーマンス推移 <span style='font-size:0.95rem; color:#888; font-weight:normal;'>(※右上の凡例をクリックで表示切替)</span>", unsafe_allow_html=True)
+        render_chart(df_meta_summary_a, df_meta_summary_b, "Meta広告")
+        
+    with col_m_right:
+        st.markdown("### 🎯 キャンペーン別 パフォーマンス")
+        if not df_meta_campaign_a.empty:
+            df_meta_campaign_a["CPA"] = df_meta_campaign_a.apply(lambda r: (r["費用"] / r["コンバージョン"]) if r["コンバージョン"] > 0 else 0, axis=1)
+            if compare_mode and not df_meta_campaign_b.empty:
+                df_meta_campaign_b["CPA"] = df_meta_campaign_b.apply(lambda r: (r["費用"] / r["コンバージョン"]) if r["コンバージョン"] > 0 else 0, axis=1)
+                m_cmp = pd.merge(df_meta_campaign_a, df_meta_campaign_b, on="キャンペーン", how="left", suffixes=("", " (比較)"))
+                m_cmp.fillna(0, inplace=True)
+                m_cmp["費用(増減)"] = m_cmp["費用"] - m_cmp["費用 (比較)"]
+                m_cmp["CPA(増減)"] = m_cmp["CPA"] - m_cmp["CPA (比較)"]
+                show_cmp = m_cmp[["キャンペーン", "費用", "費用(増減)", "CPA", "CPA(増減)"]].sort_values("費用", ascending=False)
+                st.dataframe(show_cmp, use_container_width=True, hide_index=True, height=500, column_config={
+                    "費用": st.column_config.NumberColumn("費用", format="¥%d"),
+                    "費用(増減)": st.column_config.NumberColumn("費用(増減)", format="¥%d"),
+                    "CPA": st.column_config.NumberColumn("CPA", format="¥%d"),
+                    "CPA(増減)": st.column_config.NumberColumn("CPA(増減)", format="¥%d"),
+                })
+            else:
+                df_meta_campaign_a = df_meta_campaign_a.sort_values("費用", ascending=False)
+                st.dataframe(df_meta_campaign_a, use_container_width=True, hide_index=True, height=500, column_config={
+                    "費用": st.column_config.NumberColumn("費用", format="¥%d"),
+                    "CPA": st.column_config.NumberColumn("CPA", format="¥%d"),
+                })
+
+st.markdown("---")
+
+st.markdown("### 🌐 Webサイト アクセス解析")
+if ga4_error_a:
+    st.error(f"⚠️ GA4 APIエラー: {ga4_error_a}")
+elif not df_ga4_a.empty:
+    if compare_mode and not df_ga4_b.empty:
+        m_ga4 = pd.merge(df_ga4_a, df_ga4_b, on="流入元", how="left", suffixes=("", " (比較)"))
+        m_ga4.fillna(0, inplace=True)
+        m_ga4["セッション(増減)"] = m_ga4["セッション数"] - m_ga4["セッション数 (比較)"]
+        show_ga4 = m_ga4[["流入元", "セッション数", "セッション(増減)", "エンゲージメント率"]]
+        st.dataframe(show_ga4, use_container_width=True, hide_index=True, column_config={"エンゲージメント率": st.column_config.NumberColumn(format="%.1f %%")}, height=250)
+    else:
+        st.dataframe(df_ga4_a, use_container_width=True, hide_index=True, column_config={"エンゲージメント率": st.column_config.NumberColumn(format="%.1f %%")}, height=250)
+else:
+    st.info("指定された期間のGA4データはありません。")
 
 st.markdown("---")
 
