@@ -8,6 +8,8 @@ import datetime
 import random
 import os
 import plotly.graph_objects as go
+import requests
+import json
 
 st.set_page_config(page_title="広告ダッシュボード", layout="wide", initial_sidebar_state="collapsed")
 
@@ -165,6 +167,89 @@ def fetch_real_data(start_str, end_str):
         
     return ads_df_summary, ads_df_keywords, ads_error, ga4_df, ga4_error
 
+@st.cache_data(ttl=3600, show_spinner=False)
+def fetch_real_meta_data(start_str, end_str):
+    meta_error = None
+    df_summary = pd.DataFrame()
+    df_campaign = pd.DataFrame()
+    
+    try:
+        if "meta_ads" not in st.secrets:
+            return pd.DataFrame(), pd.DataFrame(), "secrets.toml に [meta_ads] が設定されていません"
+            
+        META_ACCESS_TOKEN = st.secrets["meta_ads"]["access_token"]
+        META_AD_ACCOUNT_ID = st.secrets["meta_ads"]["ad_account_id"]
+        
+        if not META_AD_ACCOUNT_ID.startswith("act_"):
+            META_AD_ACCOUNT_ID = f"act_{META_AD_ACCOUNT_ID}"
+            
+        base_url = f"https://graph.facebook.com/v19.0/{META_AD_ACCOUNT_ID}/insights"
+        
+        params_summary = {
+            "access_token": META_ACCESS_TOKEN,
+            "time_range": json.dumps({"since": start_str, "until": end_str}),
+            "time_increment": 1,
+            "level": "account",
+            "fields": "impressions,clicks,spend,actions"
+        }
+        
+        res_summary = requests.get(base_url, params=params_summary).json()
+        
+        if "error" in res_summary:
+            meta_error = res_summary["error"]["message"]
+        else:
+            s_data = []
+            for row in res_summary.get("data", []):
+                conversions = 0
+                if "actions" in row:
+                    for action in row["actions"]:
+                        # 共通のコンバージョンアクション（リード、購入など）をカウント
+                        if action["action_type"] in ["lead", "purchase", "offsite_conversion.fb_pixel_lead", "onsite_conversion.lead_grouped"]:
+                            conversions += int(action.get("value", 0))
+                            
+                s_data.append({
+                    "日付": row.get("date_start"),
+                    "表示回数": int(row.get("impressions", 0)),
+                    "クリック数": int(row.get("clicks", 0)),
+                    "費用": float(row.get("spend", 0)),
+                    "コンバージョン": conversions
+                })
+            df_summary = pd.DataFrame(s_data)
+            if not df_summary.empty:
+                df_summary["CTR"] = (df_summary["クリック数"] / df_summary["表示回数"] * 100).fillna(0)
+                
+        params_campaign = {
+            "access_token": META_ACCESS_TOKEN,
+            "time_range": json.dumps({"since": start_str, "until": end_str}),
+            "level": "campaign",
+            "fields": "campaign_name,impressions,clicks,spend,actions"
+        }
+        
+        res_campaign = requests.get(base_url, params=params_campaign).json()
+        
+        if "error" not in res_campaign:
+            c_data = []
+            for row in res_campaign.get("data", []):
+                conversions = 0
+                if "actions" in row:
+                    for action in row["actions"]:
+                        if action["action_type"] in ["lead", "purchase", "offsite_conversion.fb_pixel_lead", "onsite_conversion.lead_grouped"]:
+                            conversions += int(action.get("value", 0))
+                            
+                c_data.append({
+                    "キャンペーン": row.get("campaign_name"),
+                    "表示回数": int(row.get("impressions", 0)),
+                    "クリック数": int(row.get("clicks", 0)),
+                    "費用": float(row.get("spend", 0)),
+                    "コンバージョン": conversions
+                })
+            df_campaign = pd.DataFrame(c_data)
+            
+    except Exception as e:
+        meta_error = str(e)
+        
+    return df_summary, df_campaign, meta_error
+
 def generate_mock_ads_data(start_str, end_str):
     delta = (datetime.datetime.strptime(end_str, "%Y-%m-%d").date() - datetime.datetime.strptime(start_str, "%Y-%m-%d").date()).days
     if delta < 0: delta = 0
@@ -219,14 +304,14 @@ with st.spinner("対象期間のデータを取得しています..."):
     start_str_a = start_date_a.strftime("%Y-%m-%d")
     end_str_a = end_date_a.strftime("%Y-%m-%d")
     df_summary_a, df_keywords_a, ads_error_a, df_ga4_a, ga4_error_a = fetch_real_data(start_str_a, end_str_a)
-    df_meta_summary_a, df_meta_campaign_a = generate_mock_meta_ads_data(start_str_a, end_str_a)
+    df_meta_summary_a, df_meta_campaign_a, meta_error_a = fetch_real_meta_data(start_str_a, end_str_a)
     
 if compare_mode:
     with st.spinner("比較期間のデータを取得しています..."):
         start_str_b = start_date_b.strftime("%Y-%m-%d")
         end_str_b = end_date_b.strftime("%Y-%m-%d")
         df_summary_b, df_keywords_b, ads_error_b, df_ga4_b, ga4_error_b = fetch_real_data(start_str_b, end_str_b)
-        df_meta_summary_b, df_meta_campaign_b = generate_mock_meta_ads_data(start_str_b, end_str_b)
+        df_meta_summary_b, df_meta_campaign_b, meta_error_b = fetch_real_meta_data(start_str_b, end_str_b)
 else:
     df_summary_b = pd.DataFrame()
     df_meta_summary_b = pd.DataFrame()
@@ -237,6 +322,13 @@ if ads_error_a or df_summary_a.empty:
     df_summary_a, df_keywords_a = generate_mock_ads_data(start_str_a, end_str_a)
     if compare_mode:
         df_summary_b, df_keywords_b = generate_mock_ads_data(start_str_b, end_str_b)
+
+if meta_error_a or df_meta_summary_a.empty:
+    if meta_error_a:
+        st.error(f"⚠️ Meta広告 APIエラー: (詳細: {meta_error_a})")
+    df_meta_summary_a, df_meta_campaign_a = generate_mock_meta_ads_data(start_str_a, end_str_a)
+    if compare_mode:
+        df_meta_summary_b, df_meta_campaign_b = generate_mock_meta_ads_data(start_str_b, end_str_b)
 
 def calc_metrics(df):
     if df.empty: return 0, 0, 0, 0, 0, 0, 0
@@ -294,7 +386,7 @@ def render_chart(df_a, df_b, title_prefix=""):
     )
     st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 
-tab_google, tab_meta = st.tabs(["📊 Google広告", "🔵 Meta広告 (連携準備中)"])
+tab_google, tab_meta = st.tabs(["📊 Google広告", "🔵 Meta広告"])
 
 with tab_google:
     clk_a, imp_a, cst_a, cnv_a, ctr_a, cpa_a, cvr_a = calc_metrics(df_summary_a)
@@ -350,7 +442,7 @@ with tab_meta:
     
     col_m_left, col_m_right = st.columns([1, 1])
     with col_m_left:
-        st.markdown("### 🔵 Meta広告 パフォーマンス (Mock)")
+        st.markdown("### 🔵 Meta広告 パフォーマンス")
         mm1, mm2, mm3 = st.columns(3)
         mm1.metric("総費用", f"¥{int(m_cst_a):,}", get_delta(m_cst_a, m_cst_b, df_meta_summary_b, is_currency=True), delta_color="inverse")
         mm2.metric("クリック数", f"{int(m_clk_a):,} 回", get_delta(m_clk_a, m_clk_b, df_meta_summary_b))
