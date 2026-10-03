@@ -204,7 +204,7 @@ def fetch_real_meta_data(start_str, end_str):
                 if "actions" in row:
                     for action in row["actions"]:
                         # 共通のコンバージョンアクション（リード、購入など）をカウント
-                        if action["action_type"] in ["lead", "purchase", "offsite_conversion.fb_pixel_lead", "onsite_conversion.lead_grouped"]:
+                        if action["action_type"] in ["lead", "contact", "purchase", "submit_application", "schedule", "find_location", "offsite_conversion.fb_pixel_lead", "offsite_conversion.fb_pixel_contact", "offsite_conversion.fb_pixel_purchase", "offsite_conversion.fb_pixel_submit_application", "onsite_conversion.lead_grouped"]:
                             conversions += int(action.get("value", 0))
                             
                 s_data.append({
@@ -233,7 +233,7 @@ def fetch_real_meta_data(start_str, end_str):
                 conversions = 0
                 if "actions" in row:
                     for action in row["actions"]:
-                        if action["action_type"] in ["lead", "purchase", "offsite_conversion.fb_pixel_lead", "onsite_conversion.lead_grouped"]:
+                        if action["action_type"] in ["lead", "contact", "purchase", "submit_application", "schedule", "find_location", "offsite_conversion.fb_pixel_lead", "offsite_conversion.fb_pixel_contact", "offsite_conversion.fb_pixel_purchase", "offsite_conversion.fb_pixel_submit_application", "onsite_conversion.lead_grouped"]:
                             conversions += int(action.get("value", 0))
                             
                 c_data.append({
@@ -521,3 +521,4 @@ if os.path.exists(report_path):
     st.markdown(f"<div class='report-box'>{date_header}{report_content}</div>", unsafe_allow_html=True)
 else:
     st.markdown("<div class='report-box'>今週のレポートはまだ作成されていません。（※毎週土曜朝6時に更新されます）</div>", unsafe_allow_html=True)
+
