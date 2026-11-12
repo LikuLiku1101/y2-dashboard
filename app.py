@@ -167,12 +167,39 @@ def fetch_real_data(start_str, end_str):
         
     return ads_df_summary, ads_df_keywords, ads_error, ga4_df, ga4_error
 
-@st.cache_data(ttl=3600, show_spinner=False)
+@st.cache_data(ttl=300, show_spinner=False)
 def fetch_real_meta_data(start_str, end_str):
     meta_error = None
     df_summary = pd.DataFrame()
     df_campaign = pd.DataFrame()
     
+    def count_meta_conversions(actions):
+        if not actions:
+            return 0
+        action_map = {a["action_type"]: int(float(a.get("value", 0))) for a in actions}
+        total = 0
+        # 1. リード系 (重複を防ぐため親カテゴリを優先して1つだけ採用)
+        for k in ["lead", "onsite_conversion.lead_grouped", "offsite_conversion.fb_pixel_lead"]:
+            if k in action_map:
+                total += action_map[k]
+                break
+        # 2. 問い合わせ系
+        for k in ["contact", "offsite_conversion.fb_pixel_contact"]:
+            if k in action_map:
+                total += action_map[k]
+                break
+        # 3. 申込系
+        for k in ["submit_application", "offsite_conversion.fb_pixel_submit_application"]:
+            if k in action_map:
+                total += action_map[k]
+                break
+        # 4. 購入系
+        for k in ["purchase", "offsite_conversion.fb_pixel_purchase"]:
+            if k in action_map:
+                total += action_map[k]
+                break
+        return total
+
     try:
         if "meta_ads" not in st.secrets:
             return pd.DataFrame(), pd.DataFrame(), "secrets.toml に [meta_ads] が設定されていません"
@@ -200,12 +227,7 @@ def fetch_real_meta_data(start_str, end_str):
         else:
             s_data = []
             for row in res_summary.get("data", []):
-                conversions = 0
-                if "actions" in row:
-                    for action in row["actions"]:
-                        # 共通のコンバージョンアクション（リード、購入など）をカウント
-                        if action["action_type"] in ["lead", "contact", "purchase", "submit_application", "schedule", "find_location", "offsite_conversion.fb_pixel_lead", "offsite_conversion.fb_pixel_contact", "offsite_conversion.fb_pixel_purchase", "offsite_conversion.fb_pixel_submit_application", "onsite_conversion.lead_grouped"]:
-                            conversions += int(action.get("value", 0))
+                conversions = count_meta_conversions(row.get("actions", []))
                             
                 s_data.append({
                     "日付": row.get("date_start"),
@@ -230,11 +252,7 @@ def fetch_real_meta_data(start_str, end_str):
         if "error" not in res_campaign:
             c_data = []
             for row in res_campaign.get("data", []):
-                conversions = 0
-                if "actions" in row:
-                    for action in row["actions"]:
-                        if action["action_type"] in ["lead", "contact", "purchase", "submit_application", "schedule", "find_location", "offsite_conversion.fb_pixel_lead", "offsite_conversion.fb_pixel_contact", "offsite_conversion.fb_pixel_purchase", "offsite_conversion.fb_pixel_submit_application", "onsite_conversion.lead_grouped"]:
-                            conversions += int(action.get("value", 0))
+                conversions = count_meta_conversions(row.get("actions", []))
                             
                 c_data.append({
                     "キャンペーン": row.get("campaign_name"),
