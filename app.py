@@ -334,19 +334,11 @@ else:
     df_summary_b = pd.DataFrame()
     df_meta_summary_b = pd.DataFrame()
 
-if ads_error_a or df_summary_a.empty:
-    if ads_error_a:
-        st.error(f"⚠️ Google広告 APIエラー: (詳細: {ads_error_a})")
-    df_summary_a, df_keywords_a = generate_mock_ads_data(start_str_a, end_str_a)
-    if compare_mode:
-        df_summary_b, df_keywords_b = generate_mock_ads_data(start_str_b, end_str_b)
+if ads_error_a:
+    st.error(f"⚠️ Google広告 APIエラー: (詳細: {ads_error_a})")
 
-if meta_error_a or df_meta_summary_a.empty:
-    if meta_error_a:
-        st.error(f"⚠️ Meta広告 APIエラー: (詳細: {meta_error_a})")
-    df_meta_summary_a, df_meta_campaign_a = generate_mock_meta_ads_data(start_str_a, end_str_a)
-    if compare_mode:
-        df_meta_summary_b, df_meta_campaign_b = generate_mock_meta_ads_data(start_str_b, end_str_b)
+if meta_error_a:
+    st.error(f"⚠️ Meta広告 APIエラー: (詳細: {meta_error_a})")
 
 def calc_metrics(df):
     if df.empty: return 0, 0, 0, 0, 0, 0, 0
@@ -368,6 +360,9 @@ def get_delta(val_a, val_b, df_b, is_currency=False, is_percent=False):
     return f"{sign}{diff:,.0f}"
 
 def render_chart(df_a, df_b, title_prefix=""):
+    if df_a.empty:
+        st.info("指定された期間の配信データはありません。")
+        return
     fig = go.Figure()
     if compare_mode and not df_b.empty:
         df_a_plot = df_a.copy()
@@ -453,6 +448,8 @@ with tab_google:
                     "費用": st.column_config.NumberColumn("費用", format="¥%d"),
                     "CPA": st.column_config.NumberColumn("CPA", format="¥%d"),
                 })
+        else:
+            st.info("指定された期間のキーワードデータはありません。")
 
 with tab_meta:
     m_clk_a, m_imp_a, m_cst_a, m_cnv_a, m_ctr_a, m_cpa_a, m_cvr_a = calc_metrics(df_meta_summary_a)
@@ -501,6 +498,8 @@ with tab_meta:
                     "費用": st.column_config.NumberColumn("費用", format="¥%d"),
                     "CPA": st.column_config.NumberColumn("CPA", format="¥%d"),
                 })
+        else:
+            st.info("指定された期間のキャンペーンデータはありません。")
 
 st.markdown("---")
 
